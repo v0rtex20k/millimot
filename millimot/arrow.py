@@ -1,7 +1,4 @@
-import mole
-import target
 import numpy as np
-from mole import *
 from PIL import ImageDraw
 import scipy.ndimage as sn
 from PIL import Image as pillow
@@ -45,6 +42,3 @@ def trim_v_arrows(box: Tuple[int, int, int, int], src_image_arr: ndarray, thresh
 	black_mask = np.any((arrow <= threshold), axis=1)
 	top_cut, bottom_cut = np.argmax(black_mask), np.argmax(black_mask[::-1])
 	return ((x,y+top_cut,w,h-bottom_cut), arrow[black_mask, :]) if arrow[black_mask, :].size else (None, None)
-
-
-

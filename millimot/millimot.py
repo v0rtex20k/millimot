@@ -3,19 +3,20 @@ import mole
 import arrow
 import target
 import argparse
+import networker
 import numpy as np
-from scipy import stats
+import networkx as nx
 from PIL import ImageDraw
 import scipy.ndimage as sn
 from segmentations import *
 from transformations import *
 from PIL import Image as pillow
 from matplotlib import pyplot as mtplt
-from typing import List, Callable, Tuple
-from skimage.measure import regionprops
+from typing import List, Callable, Tuple, NewType
 
 ndarray, filepath = List, str
 collection = List[ndarray]
+Graph = NewType('Graph', nx.classes.graph.Graph)
 
 #display_images(OrderedDict({"Original": image, "Enhanced": e_image, "Enhanced + Filtered": ef_image, 
 #													  "Enhanced + Filtered + Segmented": sef_image}))
@@ -27,13 +28,14 @@ def display_images(imageList: collection)-> None:
 		if 'q' in c.lower(): break
 	print('[DONE]')
 
-#plot_pixels(image, ef_image)
-def plot_pixels(old_image: ndarray, new_image: ndarray)-> None:
-	mtplt.plot(old_image.histogram(), label="Original")
-	mtplt.plot(new_image.histogram(), label="EF")
+def plot_pixels(image: ndarray, idx: int)-> None:
+	pixels, counts = np.unique(image, return_counts=True)
+	mtplt.axvline(pixels[np.argmax(counts)], color='g', linestyle='dashed', linewidth=2)
+	mtplt.plot(pixels, counts)
 	mtplt.xlabel('Pixel Value')
 	mtplt.ylabel('Frequency')
-	mtplt.legend(loc="upper left")
+	print('Box {} ---> {:.4f}'.format(str(idx), pixels[np.argmax(counts)]))
+	mtplt.title('Box {} ---> {:.4f}'.format(str(idx), image.mean(), pixels[np.argmax(counts)]))
 	mtplt.yscale('log')
 	mtplt.show()
 
@@ -54,6 +56,7 @@ def conditional_call(func: (Callable[[ndarray, int], ndarray]), image: ndarray, 
 	return pillow.fromarray(np.uint8(func(image, *args)) if args else np.uint8(func(image))) if func else image
 
 ReLU = lambda x: max(0, x)
+area = lambda x, y, w, h: (w-x) * (h-y)
 def find_nodes(imgPath: filepath, filter_func: (Callable[[ndarray, int], ndarray]), f_args: Tuple,
 						   		 enhance_func: (Callable[[ndarray, int], ndarray]), e_args: Tuple,
 						  		 segment_func: (Callable[[ndarray, int], ndarray]), s_args: Tuple)-> [List[Tuple[int, int, int, int]], ndarray]:
@@ -65,46 +68,78 @@ def find_nodes(imgPath: filepath, filter_func: (Callable[[ndarray, int], ndarray
 	sef_image = conditional_call(segment_func, (rgb_image, ef_image), s_args, True)
 
 	gray_cv2_image, contours = target.get_contours(sef_image)
-	boxes = target.get_boxes(gray_cv2_image, contours, 200)
+	boxes = target.get_boxes(gray_cv2_image, contours, 100)
 	image_arr = np.asarray(image).copy()
+	artist = ImageDraw.Draw(image)
 	nodes = []
-
-	for box in boxes:
+	for i, box in enumerate(boxes):
 		if mole.contains_node(box, image):
 			trim_box = mole.trimmed_box(box, image)
-			x, y, w, h = trim_box
-			left_pad, right_pad, up_pad, down_pad = mole.expanded_box(trim_box, image)
-			xt, yt, wt, ht = ReLU(x-left_pad), ReLU(y-up_pad), ReLU(x+w+right_pad), ReLU(y+h+down_pad)
-			image_arr[yt:ht,xt:wt] = 255
-			nodes.append((xt, yt, wt, ht)) # wt and ht INCLUDE X AND Y!! Easier for slicing, but NOT default rect format
-	#pillow.fromarray(image_arr).show()
-	return nodes, image_arr
+			xt, yt, wt, ht = trim_box
+			nodes.append((xt, yt, xt+wt, yt+ht))
+	filtered_nodes = mole.filter_by_area(nodes)
+	expanded_filtered_nodes = []
+	for i, node in enumerate(filtered_nodes):
+		x, y, w, h = node
+		left_pad, right_pad, up_pad, down_pad = mole.expanded_box(node, image)
+		xe, ye, we, he = ReLU(x-left_pad), ReLU(y-up_pad), ReLU(w+right_pad), ReLU(h+down_pad)
+		expanded_filtered_nodes.append((xe, ye, we, he))
+		#artist.rectangle((xe,ye,we,he), fill=None, outline=(0))
+	#image.show()
+	#  ***************************IMPORTANT*******************************************
+	#  * wt and ht INCLUDE X AND Y!! Easier for slicing, but NOT default rect format *
+	#  *******************************************************************************
+	return expanded_filtered_nodes, image_arr
 
 def find_edges(image_arr: ndarray, binary_threshold: int)-> List[Tuple[int, int, int, int]]:
 	segment_func, s_args = segmenters('ags')
 	s_image_arr = conditional_call(segment_func, (None, image_arr), s_args, True)
 	gray_cv2_image, contours = target.get_contours(s_image_arr)
-	image = pillow.fromarray(image_arr)
-	artist = ImageDraw.Draw(image)
+	#image = pillow.fromarray(image_arr)
+	#artist = ImageDraw.Draw(image)
 	edges = []
 	for i, contour in enumerate(contours):
 		box = cv2.boundingRect(contour)
 		x, y, w, h = box
-		if 300 < w*h < 10000:
+		if 500 < w*h < 10000:
 			arrow_box, arrow_arr = arrow.trim_v_arrows(box, image_arr)
 			if arrow_arr is None or arrow_box is None: continue
 			arrow_box, arrow_arr = arrow.trim_h_arrows(arrow_box, image_arr)
 			if arrow_arr is None or arrow_box is None: continue
 			xc, yc, wc, hc = arrow_box
-			artist.rectangle((xc,yc,xc+wc,yc+hc), fill=None, outline=(0))
+			#artist.rectangle((xc,yc,xc+wc,yc+hc), fill=None, outline=(0))
 			points = arrow.fit_line(arrow_box, arrow_arr)
-			artist.line(points, fill =(200), width = 2)
+			#artist.line(points, fill =(200), width = 2)
 			edges.append(points)
+	#image.show()
 	return edges
 
+def build_network(nodeList: List[Tuple[int, int, int, int]], edgesList: List[Tuple[int, int]], image_arr)-> Graph:
+	used_nodes = set()
+	for edge in edgesList:
+		midpoint = networker.midpoint(*edge)
+		sorted_node_frames = networker.rank_nodes(midpoint, nodeList)
+		incident_nodes, intersections = networker.find_valid_intersections(edge, sorted_node_frames)
+		if incident_nodes in used_nodes or incident_nodes is None: continue
+		used_nodes.add(incident_nodes)
+		print('\tDisplaying: ', incident_nodes, '----> X: ', intersections)
+		image = pillow.fromarray(image_arr)
+		artist = ImageDraw.Draw(image)
+		corners = []
+		for node in incident_nodes:
+			x, y, w, h = node # w and h INCLUDE x and y! 
+			artist.rectangle((x,y,w,h), fill=None, outline=(0))
+			corners.append((x+(w-x)//2,y))
+		artist.line(corners, fill=(150), width = 5)
+		artist.line(edge, fill=(200), width=2)
+		image.show()
+		input('Display next? ')
+
+		#dist = [networker.distance(midpoint, )]
 def core(args: dict)-> None:
 	nodes, arrow_image = find_nodes(args['image'], *filters(args['filter']), *enhancers(args['enhancer']), *segmenters(args['segmenter']))
 	edges = find_edges(arrow_image, 127)
+	build_network(nodes, edges, arrow_image)
 
 if __name__ == '__main__':
 	#https://pillow.readthedocs.io/en/stable/reference/Image.html
