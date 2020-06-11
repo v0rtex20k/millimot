@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-from typing import List, Tuple
 import scipy.ndimage as sn
+from typing import List, Tuple
 from PIL import Image as pillow
 
 ndarray = List

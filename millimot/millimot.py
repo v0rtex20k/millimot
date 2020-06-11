@@ -1,7 +1,7 @@
 import cv2
 import mole
 import arrow
-import target
+import boxer
 import argparse
 import networker
 import numpy as np
@@ -67,8 +67,8 @@ def find_nodes(imgPath: filepath, filter_func: (Callable[[ndarray, int], ndarray
 	ef_image = conditional_call(filter_func, e_image, f_args)
 	sef_image = conditional_call(segment_func, (rgb_image, ef_image), s_args, True)
 
-	gray_cv2_image, contours = target.get_contours(sef_image)
-	boxes = target.get_boxes(gray_cv2_image, contours, 100)
+	gray_cv2_image, contours = boxer.get_contours(sef_image)
+	boxes = boxer.get_boxes(gray_cv2_image, contours, 100)
 	image_arr = np.asarray(image).copy()
 	artist = ImageDraw.Draw(image)
 	nodes = []
@@ -94,7 +94,7 @@ def find_nodes(imgPath: filepath, filter_func: (Callable[[ndarray, int], ndarray
 def find_edges(image_arr: ndarray, binary_threshold: int)-> List[Tuple[int, int, int, int]]:
 	segment_func, s_args = segmenters('ags')
 	s_image_arr = conditional_call(segment_func, (None, image_arr), s_args, True)
-	gray_cv2_image, contours = target.get_contours(s_image_arr)
+	gray_cv2_image, contours = boxer.get_contours(s_image_arr)
 	#image = pillow.fromarray(image_arr)
 	#artist = ImageDraw.Draw(image)
 	edges = []
