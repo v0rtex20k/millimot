@@ -6,7 +6,8 @@ from PIL import Image as pillow
 from collections import OrderedDict
 from typing import List, Tuple, Mapping
 
-Node_Frame_Dict = Mapping[Tuple[int, int, int, int], Tuple[int, Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int]]]]
+Box = Tuple[int, int, int, int]
+Node_Frame_Dict = Mapping[Box, Tuple[int, Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int]]]]
 
 # Each rectangle becomes 4 line segments:
 #	l1 = [(x,y), (x+w,y)]  		- (up)
@@ -22,7 +23,7 @@ def distance(p1: Tuple[int, int], p2: Tuple[int, int])-> float:
 	x2, y2 = p2
 	return hypot(x2 - x1, y2 - y1)
 
-def get_rectangle_center(box: Tuple[int, int, int, int])-> Tuple[int, int]:
+def get_rectangle_center(box: Box)-> Tuple[int, int]:
 	x, y, w, h = box
 	return [x+(w//2), y+(h//2)]
 
@@ -45,7 +46,7 @@ def intersection(L1: Tuple[int, int, int], L2: Tuple[int, int, int])-> bool:
 		return Dx / D, Dy / D
 	return None, None
 
-def frames(box: Tuple[int, int, int, int])-> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
+def frames(box: Box)-> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
 	x, y, w, h = box
 	up    = ((x,y), (x+w,y))  		# - (up)
 	down  = ((x,y+h), (x+w,y+h))    # - (down)
@@ -54,12 +55,12 @@ def frames(box: Tuple[int, int, int, int])-> Tuple[Tuple[int, int], Tuple[int, i
 	borders = [up, down, left, right]
 	return [encode_line(*border) for border in borders]
 
-def rank_nodes(midpoint: Tuple[int, int], nodes: List[Tuple[int, int, int, int]]):
+def rank_nodes(midpoint: Tuple[int, int], nodes: List[Box]):
 	sorted_nodes = {rect: (distance(midpoint, get_rectangle_center(rect)), frames(rect)) for rect in nodes}
 	sorted_nodes = OrderedDict({k: v for k, v in sorted(sorted_nodes.items(), key=lambda item: item[1][0])})
 	return sorted_nodes
 
-def enclosed(edge: Tuple[Tuple[int, int], Tuple[int, int]], box: Tuple[int, int, int, int])-> bool:
+def enclosed(edge: Tuple[Tuple[int, int], Tuple[int, int]], box: Box)-> bool:
 	x, y, w, h = box
 	(x1, y1), (x2, y2) = edge
 	if x <= x1 <= w and y <= y1 <= h:
@@ -68,12 +69,11 @@ def enclosed(edge: Tuple[Tuple[int, int], Tuple[int, int]], box: Tuple[int, int,
 		return True
 	return False
 
-def find_valid_intersections(edge: Tuple[int, int], sorted_node_frames: Node_Frame_Dict)-> [Tuple[int, int, int, int], Tuple[int, int, int, int]]:
+def find_valid_intersections(edge: Tuple[int, int], sorted_node_frames: Node_Frame_Dict)-> [List[Box], List[Box]]:
 	# W AND H INCLUDE X AND Y
+	pad = 5
 	line = encode_line(*edge)
-	pad  = 5 
-	incident_nodes = []
-	intersections = []
+	incident_nodes, intersections = [], []
 	for rect in sorted_node_frames.keys():
 		if enclosed(edge, rect): return None, None
 	for rect, (dist, frame) in sorted_node_frames.items():

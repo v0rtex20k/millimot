@@ -8,9 +8,10 @@ from matplotlib import pyplot as mtplt
 from typing import List, Callable, Tuple
 
 ndarray = List
+Box = Tuple[int, int, int, int]
 mo = lambda arr: stats.mode(arr, axis=None)[0]
 
-def most_common_pixel(box: Tuple[int, int, int, int], image_arr: ndarray)-> int:
+def most_common_pixel(box: Box, image_arr: ndarray)-> int:
 	x, y, w, h = box
 	cropped_arr = image_arr[y:y+h,x:x+w]
 	pixels, counts = np.unique(cropped_arr, return_counts=True)
@@ -40,7 +41,7 @@ def grow_vertical(start: int, stop: int, const: int, direction: int, image_arr: 
 			break # --> out of bounds
 	return p
 
-def expanded_box(box: Tuple[int, int, int, int], src_image: ndarray)-> Tuple[int, int, int, int]:
+def expanded_box(box: Box, src_image: ndarray)-> Box:
 	x, y, w, h = box
 	w -= (x+1) # just to adjust for the fact that w and h ALREADY CONTAIN x and y --->
 	h -= (y+1) # out of bounds otherwise
@@ -52,7 +53,7 @@ def expanded_box(box: Tuple[int, int, int, int], src_image: ndarray)-> Tuple[int
 
 	return left_pad+1, right_pad+1, up_pad+1, down_pad+1
 
-def trimmed_box(box: Tuple[int, int, int, int], src_image: ndarray)-> Tuple[int, int, int, int]:
+def trimmed_box(box: Box, src_image: ndarray)-> Box:
 	x, y, w, h = box
 	image_arr = np.asarray(src_image).copy()
 	from_left_cut = 0
@@ -73,18 +74,19 @@ def trimmed_box(box: Tuple[int, int, int, int], src_image: ndarray)-> Tuple[int,
 	return (x+from_left_cut, y, w-(from_left_cut+from_right_cut), h)
 
 area = lambda x, y, w, h: (w-x) * (h-y)
-def filter_by_area(nodes: List[Tuple[int, int, int, int]])-> ndarray:
+def filter_by_area(nodes: List[Box])-> ndarray:
 	node_areas = [area(*node) for node in nodes]
 	mu = np.mean(node_areas, axis=0)
 	stdev = np.std(node_areas, axis=0)
-	final_indices = [i for i, a in enumerate(node_areas) if (mu - stdev < a < mu + 3*stdev)]
+	final_indices = [i for i, a in enumerate(node_areas) if (mu - stdev <= a <= mu + 10*stdev)] # DO NOT GO PAST -1.5*stdev !!!!
+																							   # OK to be more lax on the big side (3-5)
 	return np.asarray(nodes)[final_indices]
 
-def contains_node(box: Tuple[int, int, int, int], src_image: ndarray)-> bool:
+def contains_node(box: Box, src_image: ndarray)-> bool:
 	x, y, w, h = box
 	image_arr = np.asarray(src_image).copy()
 	z = image_arr[y:y+h,x:x+w]
-	if h > w or most_common_pixel(box, image_arr) >= 250:
+	if h > w or most_common_pixel(box, image_arr) >= 250: # should be very close to pure white
 		return False
 	return True
 

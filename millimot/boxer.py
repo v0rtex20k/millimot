@@ -5,6 +5,7 @@ from typing import List, Tuple
 from PIL import Image as pillow
 
 ndarray = List
+Box = Tuple[int, int, int, int]
 
 def overlap(new_box: Tuple, existing_boxes: Tuple)-> bool:
     if not existing_boxes: return False
@@ -16,7 +17,7 @@ def overlap(new_box: Tuple, existing_boxes: Tuple)-> bool:
         return True
     return False
 
-def get_boxes(gray_cv2_image: ndarray, contours: ndarray, minval: int, show=False)-> List:
+def get_boxes(gray_cv2_image: ndarray, contours: ndarray, minval: int)-> List:
     bgr_cv2_image = cv2.cvtColor(gray_cv2_image, cv2.COLOR_GRAY2BGR)
     boxes = []
     for i, contour in enumerate(contours):
@@ -25,11 +26,6 @@ def get_boxes(gray_cv2_image: ndarray, contours: ndarray, minval: int, show=Fals
         x,y,w,h = box
         if not overlap(box, boxes):
             boxes.append(box)
-            if show:
-                cv2.rectangle(bgr_cv2_image,(x,y),(x+w,y+h),(0,255,0),2)
-    if show:
-        cv2.imshow('Boxes', bgr_cv2_image)
-        cv2.waitKey(0)
     return boxes
 
 #target.draw_my_contours(gray_cv2_image, contours)
@@ -42,10 +38,12 @@ def draw_my_contours(gray_cv2_image: ndarray, contours: ndarray)-> None:
     cv2.imshow('Contours', bgr_cv2_image)
     cv2.waitKey(0)
 
-def get_contours(image: ndarray)-> ndarray:
+def get_contours(image: ndarray, make_boxes: bool=True)-> ndarray:
     bgr_cv2_image  = cv2.cvtColor(np.asarray(image), cv2.COLOR_GRAY2BGR)
     gray_cv2_image = cv2.cvtColor(bgr_cv2_image, cv2.COLOR_BGR2GRAY)
     ret,thresh = cv2.threshold(gray_cv2_image, 2, 255, 0)
     contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    if make_boxes:
+        return get_boxes(gray_cv2_image, contours, 100)
     return gray_cv2_image, contours
     

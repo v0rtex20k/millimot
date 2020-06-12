@@ -12,7 +12,7 @@ def myCanny(img: ndarray, *args: Tuple[int])-> ndarray:
 def mean_filter(img: ndarray, size: int) -> ndarray:
 	return sn.convolve(img, np.ones((size,size))/(size**2))
 
-def filters(key: str)-> Transformer:
+def filters(keys: str)-> Transformer:
 	F = {'nan': (None, None),
 		 'sob': (sn.sobel, ()),
 		 'prw': (sn.prewitt, ()),
@@ -23,10 +23,13 @@ def filters(key: str)-> Transformer:
 	     'max': (sn.maximum_filter, (5,)), 
 	     'min': (sn.minimum_filter, (5,)), 
 	     'LoG': (sn.gaussian_laplace, (1,))}
+	filter_funcs = []
 	try:
-		return(F[key])
+		for key in keys:
+			filter_funcs.append(F[key])
 	except KeyError:
 		print("[FILTER]\t ---> \"{}\" is not a recognized filter.".format(key)); exit(1)
+	return ([f[0] for f in filter_funcs], [f[1] for f in filter_funcs])
 
 def inverse(img: ndarray)-> ndarray:
 	img_array = np.asarray(img)
@@ -55,13 +58,16 @@ def histogram_equalization(img: ndarray)-> ndarray:
 	cdf = np.ma.filled(cdf_masked, 0)
 	return np.reshape(cdf[img_array.flatten()], img_array.shape)
 
-def enhancers(key: str)-> Transformer:
+def enhancers(keys: str)-> Transformer:
 	E = {'nan': (None, None),
 		 'inv': (inverse, ()),
 		 'log': (logarithmic, ()), # compatible w/ wtr
 		 'pwr': (power_law, (0.5,)),
 		 'heq': (histogram_equalization, ())} # compatible w/ wtr
+	enhance_funcs = []
 	try:
-		return(E[key])
+		for key in keys:
+			enhance_funcs.append(E[key])
 	except KeyError:
 		print("[ENHANCER]\t ---> \"{}\" is not a recognized enhancer.".format(key)); exit(1)
+	return ([e[0] for e in enhance_funcs], [e[1] for e in enhance_funcs])
