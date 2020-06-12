@@ -1,6 +1,5 @@
 import numpy as np
 from PIL import ImageDraw
-import scipy.ndimage as sn
 from PIL import Image as pillow
 from typing import List, Callable, Tuple
 

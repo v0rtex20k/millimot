@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 import pytesseract
 from scipy import stats
-import scipy.ndimage as sn
 from PIL import Image as pillow
 from matplotlib import pyplot as mtplt
 from typing import List, Callable, Tuple
@@ -43,8 +42,8 @@ def grow_vertical(start: int, stop: int, const: int, direction: int, image_arr: 
 
 def expanded_box(box: Box, src_image: ndarray)-> Box:
 	x, y, w, h = box
-	w -= (x+1) # just to adjust for the fact that w and h ALREADY CONTAIN x and y --->
-	h -= (y+1) # out of bounds otherwise
+	w -= 1 # need -1 b/c you're indexing, not slicing (end not included in slice, but IS for index)
+	h -= 1 
 	image_arr = np.asarray(src_image).copy()
 	left_pad = grow_horizontal(y, y+h, x, -1, image_arr)
 	right_pad = grow_horizontal(y, y+h, x+w, 1, image_arr)
@@ -78,9 +77,9 @@ def filter_by_area(nodes: List[Box])-> ndarray:
 	node_areas = [area(*node) for node in nodes]
 	mu = np.mean(node_areas, axis=0)
 	stdev = np.std(node_areas, axis=0)
-	final_indices = [i for i, a in enumerate(node_areas) if (mu - stdev <= a <= mu + 10*stdev)] # DO NOT GO PAST -1.5*stdev !!!!
-																							   # OK to be more lax on the big side (3-5)
-	return np.asarray(nodes)[final_indices]
+	final_indices = [i for i, a in enumerate(node_areas) if (mu - 1.5*stdev <= a <= mu + 5*stdev)] # DO NOT GO PAST -1.5*stdev !!!!
+																							   	   # OK to be more lax on the big side (3-5)
+	return [(x,y,w,h) for i, (x,y,w,h) in enumerate(nodes) if i in final_indices]
 
 def contains_node(box: Box, src_image: ndarray)-> bool:
 	x, y, w, h = box

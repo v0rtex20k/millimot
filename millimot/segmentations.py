@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import scipy.ndimage as sn
 from typing import List, Callable, Tuple
 
 ndarray = List

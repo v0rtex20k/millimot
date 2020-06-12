@@ -3,14 +3,15 @@ import mole
 import arrow
 import boxer
 import argparse
+import advanced
 import networker
 import numpy as np
 import networkx as nx
 from PIL import ImageDraw
-import scipy.ndimage as sn
 from segmentations import *
 from transformations import *
 from PIL import Image as pillow
+from itertools import permutations, product
 from matplotlib import pyplot as mtplt
 from typing import List, Callable, Tuple, NewType
 
@@ -31,56 +32,35 @@ def plot_pixels(image: ndarray, idx: int)-> None:
 	mtplt.yscale('log')
 	mtplt.show()
 
-def conditional_call(func: (Callable[[ndarray, int], ndarray]), image: ndarray, args: Tuple, s: bool=False)-> ndarray:
-	if s:
-		if func is None: return image[1]
-		image = np.asarray(image, dtype=np.uint8)
-		try:
-			return pillow.fromarray(np.uint8(func(image, *args)[1]) if args else np.uint8(func(image)[1])) if func else image
-		except:
-			return pillow.fromarray(np.uint8(func(image, *args)) if args else np.uint8(func(image))) if func else image
-	return pillow.fromarray(np.uint8(func(image, *args)) if args else np.uint8(func(image))) if func else image
+def conditional_call(func: (Callable[[ndarray, int], ndarray]), image: ndarray, args: Tuple, segmenting: bool=False)-> ndarray:
+	if func is None: return image
+	if not segmenting: return pillow.fromarray(np.uint8(func(image, *args)) if args else np.uint8(func(image))) if func else image
+	image = np.asarray(image, dtype=np.uint8)
+	try:
+		return pillow.fromarray(np.uint8(func(image, *args)[1]) if args else np.uint8(func(image)[1])) if func else image
+	except:
+		return pillow.fromarray(np.uint8(func(image, *args)) if args else np.uint8(func(image))) if func else image
 
 ReLU = lambda x: max(0, x)
 area = lambda x, y, w, h: (w-x) * (h-y)
-def find_nodes(imgPath: filepath, filter_funcs: (Callable[[ndarray, int], ndarray]), f_args: Tuple,
-						   		 enhance_funcs: (Callable[[ndarray, int], ndarray]), e_args: Tuple,
-						  		 segment_funcs: (Callable[[ndarray, int], ndarray]), s_args: Tuple)-> [List[Tuple[int, int, int, int]], ndarray]:
+def find_nodes(imgPath: filepath, filter_func: (Callable[[ndarray, int], ndarray]), f_args: Tuple,
+						   		 enhance_func: (Callable[[ndarray, int], ndarray]), e_args: Tuple,
+						  		 segment_func: (Callable[[ndarray, int], ndarray]), s_args: Tuple)-> [List[Tuple[int, int, int, int]], ndarray]:
 	image = pillow.open(imgPath).convert('L')
 	clone = image.copy()
-	for e_func, e_arg in zip(enhance_funcs, e_args):
-		clone = conditional_call(e_func, clone, e_arg)
 
-	for f_func, f_arg in zip(filter_funcs, f_args):
-		clone = conditional_call(f_func, clone, f_arg)
-
-	for s_func, s_arg in zip(segment_funcs, s_args):
-		clone = conditional_call(s_func, clone, s_arg, True)
+	clone = conditional_call(enhance_func, clone, e_args)
+	clone = conditional_call(filter_func, clone, f_args)
+	clone = conditional_call(segment_func, clone, s_args, True)
 
 	boxes = boxer.get_contours(clone, make_boxes=True)
 	nodes = []
-	image_arr = np.asarray(image).copy()
-	image = pillow.fromarray(image_arr)
-	artist = ImageDraw.Draw(image)
 	for box in boxes:
 		if mole.contains_node(box, image):
 			trim_box = mole.trimmed_box(box, image)
-			xt, yt, wt, ht = trim_box
-			nodes.append((xt, yt, xt+wt, yt+ht))
+			nodes.append(trim_box)
 	filtered_nodes = mole.filter_by_area(nodes)
-	nodes.clear()
-
-	for node in filtered_nodes:
-		x, y, w, h = node
-		left_pad, right_pad, up_pad, down_pad = mole.expanded_box(node, image)
-		xe, ye, we, he = ReLU(x-left_pad), ReLU(y-up_pad), ReLU(w+right_pad), ReLU(h+down_pad)
-		nodes.append((xe, ye, we, he))
-		artist.rectangle((xe,ye, we,he), fill=None, outline=(0))
-	image.show()
-	#  ***************************IMPORTANT*******************************************
-	#  * we and he INCLUDE X AND Y!! Easier for slicing, but NOT default rect format *
-	#  *******************************************************************************
-	return nodes, np.asarray(image).copy()
+	return set(filtered_nodes)
 
 def find_edges(image_arr: ndarray, binary_threshold: int)-> List[Tuple[int, int, int, int]]:
 	segment_func, s_args = segmenters('ags')
@@ -121,10 +101,10 @@ def build_network(nodeList: List[Tuple[int, int, int, int]], edgesList: List[Tup
 		corners = []
 		for node in incident_nodes:
 								  	# ****************************
-			x, y, w, h = node 		# * w and h INCLUDE x and y! *
+			x, y, w, h = node 		# * (EXPIRED) w and h INCLUDE x and y! *
 							  		# ****************************
 			artist.rectangle((x,y,w,h), fill=None, outline=(0))
-			corners.append((x+(w-x)//2,y))
+			corners.append((x+w//2,y)) # might be some issues here since I changed w and h to NOT include x and y 6/12/20
 		artist.line(corners, fill=(150), width = 5)
 		artist.line(edge, fill=(200), width=2)
 		image.show()
@@ -132,19 +112,32 @@ def build_network(nodeList: List[Tuple[int, int, int, int]], edgesList: List[Tup
 
 		#dist = [networker.distance(midpoint, )]
 def core(args: dict)-> None:
-	nodes, arrow_image = find_nodes(args['image'], *filters(args['filter']), *enhancers(args['enhancer']), *segmenters(args['segmenter']))
+	imgPath = args['image']
+	filter_list,  f_args_list = filters(args['filter'])
+	enhance_list, e_args_list = enhancers(args['enhancer'])
+	segment_list, s_args_list = segmenters(args['segmenter'])
+	nodes = set()
+	for f, f_args in zip(filter_list, f_args_list):
+		for e, e_args in zip(enhance_list, e_args_list):
+			for s, s_args in zip(segment_list, s_args_list):
+				nodes = nodes.union(find_nodes(imgPath, f, f_args, e, e_args, s, s_args))
+	centroids = boxer.get_centroids(list(nodes))
+	#boxer.draw_my_boxes(imgPath, nodes, label=False)
+	condensed_centroids = advanced.cluster_reduction(nodes, centroids)
+	boxer.draw_my_centroids(imgPath, condensed_centroids)
+	exit()
 	#edges = find_edges(arrow_image, 127)
 	#build_network(nodes, edges, arrow_image)
 
 if __name__ == '__main__':
+	#choices!!
 	#https://pillow.readthedocs.io/en/stable/reference/Image.html
 	parser = argparse.ArgumentParser()
 	parser.add_argument("-i", "--image",  help="path to image", type=str)
-	parser.add_argument("-f", "--filter", help="index of filter to apply to image", type=str, nargs='*', default='nan')
+	parser.add_argument("-f", "--filter", help="index of filter to apply to image", type=str, nargs='*', default=['nan'])
 	parser.add_argument("-e", "--enhancer", help="index of enhancer to apply to image", type=str, nargs='*', default=['nan'])
 	parser.add_argument("-s", "--segmenter", help="index of segmenter to apply to image", type=str, nargs='*', default=['nan'])
 	args = vars(parser.parse_args())
-	print(args)
 	if not args['image']: print('\tNo image provided.'); exit()
 	core(args)
 

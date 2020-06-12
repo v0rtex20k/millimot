@@ -1,7 +1,6 @@
 import numpy as np
 from math import hypot
 from PIL import ImageDraw
-import scipy.ndimage as sn
 from PIL import Image as pillow
 from collections import OrderedDict
 from typing import List, Tuple, Mapping
