@@ -1,11 +1,19 @@
 import cv2
 import numpy as np
-from math import hypot
-from PIL import ImageDraw
-from typing import List, Tuple
 from PIL import Image as pillow
+from typing import Any, List, Tuple, Callable
 
-ndarray, Box, Point = List, Tuple[int, int, int, int], Tuple[int, int]
+ndarray = List
+Box = Tuple[int, int, int, int]
+Point = Tuple[int, int]
+
+def blackout(imgPath: ndarray, boxes: List[Box])-> ndarray:
+    image = pillow.open(imgPath).convert('L')
+    image_arr = np.asarray(image).copy()
+    for box in boxes:
+        x,y,w,h = box
+        image_arr[y:y+h,x:x+w] = 100
+    return pillow.fromarray(np.uint8(image_arr))
 
 def overlap(new_box: Tuple, existing_boxes: Tuple)-> bool:
     if not existing_boxes: return False
@@ -17,34 +25,30 @@ def overlap(new_box: Tuple, existing_boxes: Tuple)-> bool:
         return True
     return False
 
+def condense(box_groups: List[ndarray[Box]])-> List[Box]:
+    condensed_boxes = []
+    for group in box_groups:
+        x,y,w,h = group.mean(axis=0).astype(int)
+        condensed_boxes.append((x,y,w,h))
+    return condensed_boxes
+
 def get_centroids(boxes: List[Box])-> List[Box]:
     centroids = []
+    centroid_to_box = dict()
     for box in boxes:
         x,y,w,h = box
         centroid = (x+(w//2), y+(h//2))
         centroids.append(centroid)
-    return centroids
+        centroid_to_box[centroid] = box
+    return centroids, centroid_to_box
 
 def get_boxes(gray_cv2_image: ndarray, contours: ndarray, minval: int)-> List:
-    bgr_cv2_image = cv2.cvtColor(gray_cv2_image, cv2.COLOR_GRAY2BGR)
     boxes = []
     for i, contour in enumerate(contours):
         if not minval < cv2.contourArea(contour) < 100000: continue
         box = cv2.boundingRect(contour)
-        x,y,w,h = box
-        #if not overlap(box, boxes):
         boxes.append(box)
     return boxes
-
-#target.draw_my_contours(gray_cv2_image, contours)
-def draw_my_contours(gray_cv2_image: ndarray, contours: ndarray)-> None:
-    bgr_cv2_image = cv2.cvtColor(gray_cv2_image, cv2.COLOR_GRAY2BGR)
-    for i, contour in enumerate(contours):
-        if not 10 < cv2.contourArea(contour) < 100000: continue
-        cv2.drawContours(bgr_cv2_image, contour, -1, (0,255,0), 3)
-        cv2.fillPoly(bgr_cv2_image, pts=contour, color=(0,255,0))
-    cv2.imshow('Contours', bgr_cv2_image)
-    cv2.waitKey(0)
 
 def get_contours(image: ndarray, make_boxes: bool=True)-> ndarray:
     bgr_cv2_image  = cv2.cvtColor(np.asarray(image), cv2.COLOR_GRAY2BGR)
@@ -52,27 +56,25 @@ def get_contours(image: ndarray, make_boxes: bool=True)-> ndarray:
     ret,thresh = cv2.threshold(gray_cv2_image, 2, 255, 0)
     contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     if make_boxes:
-        return get_boxes(gray_cv2_image, contours, 100)
+        return gray_cv2_image, get_boxes(gray_cv2_image, contours, 100)
     return gray_cv2_image, contours
-    
-def draw_my_boxes(imgPath: ndarray, boxes: set, label: bool)-> None:
-    image = pillow.open(imgPath).convert('L')
-    artist = ImageDraw.Draw(image)
-    for box in boxes:
-        x, y, w, h = box
-        artist.rectangle((x,y,x+w,y+h), fill=None, outline=(0))
-        if label:
-            artist.text((x,y-10), "({},{})".format(x, y), fill=100, font=None, anchor=None)
-            artist.point((xe+(we//2), ye+(he//2)),fill=0)
-    image.show()
 
-def draw_my_centroids(imgPath: ndarray, centroids: List[Point])-> None:
-    image = pillow.open(imgPath).convert('L')
-    blank = pillow.fromarray(np.full_like(image, 0))
-    artist = ImageDraw.Draw(blank)
-    for centroid in centroids:
-        x, y = centroid
-        r = 3
-        artist.ellipse([(x-r, y-r), (x+r, y+r)], fill=(255))
-    blank.show()
-    image.show()
+def rando(cutoff: int, if_true: Any, if_false: Any)-> int:
+    r = np.random.randint(100)
+    return (if_true if r > cutoff else if_false)
+
+def erode(ablated_image: ndarray)-> ndarray:
+    bgr_cv2_image  = cv2.cvtColor(np.asarray(ablated_image), cv2.COLOR_GRAY2BGR)
+    gray_cv2_image = cv2.cvtColor(bgr_cv2_image, cv2.COLOR_BGR2GRAY)
+    vd_kernel = np.uint8([[1,0,0,1,0,0,1], # vertical & diagonal
+                          [0,1,0,1,0,1,0],
+                          [0,0,1,1,1,0,0],
+                          [0,0,0,1,0,0,0],
+                          [0,0,1,1,1,0,0],
+                          [0,1,0,1,0,1,0],
+                          [1,0,0,1,0,0,1]])
+    eroded_gray_cv2_image = cv2.erode(gray_cv2_image, vd_kernel, iterations=1)
+    eroded_arr = np.uint8(eroded_gray_cv2_image)
+    eroded_arr[eroded_arr < 100] = 0
+    eroded_arr[eroded_arr > 100] = 255
+    return pillow.fromarray(eroded_arr)

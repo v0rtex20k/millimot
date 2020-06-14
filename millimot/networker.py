@@ -5,8 +5,10 @@ from PIL import Image as pillow
 from collections import OrderedDict
 from typing import List, Tuple, Mapping
 
+ndarray = List
+Point = Tuple[int, int]
 Box = Tuple[int, int, int, int]
-Node_Frame_Dict = Mapping[Box, Tuple[int, Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int]]]]
+Node_Frame_Dict = Mapping[Box, Tuple[int, Tuple[Point, Point, Point, Point]]]
 
 # Each rectangle becomes 4 line segments:
 #	l1 = [(x,y), (x+w,y)]  		- (up)

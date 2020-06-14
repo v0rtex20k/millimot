@@ -1,30 +1,30 @@
 import numpy as np
 from PIL import ImageDraw
+from typing import List, Tuple
 from PIL import Image as pillow
-from typing import List, Callable, Tuple
 
-ndarray= List
+ndarray = List
 Box = Tuple[int, int, int, int]
 
-def fit_line(box: Box, image_arr: ndarray)-> Tuple[int, int]:
+def fit_line(box: Box, cropped_image_arr: ndarray)-> Tuple[int, int]:
 	x, y, w, h = box
-	m, n = image_arr.shape
+	m, n = cropped_image_arr.shape
 	a,b = 0,0
 	cut = 3
 	if m > n:
 		try:
-			a = image_arr[cut,:]
-			b = image_arr[-cut,:]
+			a = cropped_image_arr[cut,:]
+			b = cropped_image_arr[-cut,:]
 		except IndexError:
-			a = image_arr[0,:]
-			b = image_arr[0,:]
+			a = cropped_image_arr[0,:]
+			b = cropped_image_arr[0,:]
 	elif n >= m:
 		try:
-			a = image_arr[:,cut]
-			b = image_arr[:,-cut]
+			a = cropped_image_arr[:,cut]
+			b = cropped_image_arr[:,-cut]
 		except IndexError:
-			a = image_arr[:,0]
-			b = image_arr[:,0]
+			a = cropped_image_arr[:,0]
+			b = cropped_image_arr[:,0]
 	a_intercept = np.argmin(a)
 	b_intercept = np.argmin(b)
 	return [(x+a_intercept, y), (x+b_intercept, y+h)] if m > n else [(x, y+a_intercept), (x+w, y+b_intercept)]

@@ -22,3 +22,4 @@ def segmenters(keys: str)-> Segmenter:
 		except KeyError:
 			print("[SEGMENTER]\t ---> \"{}\" is not a recognized segmenter.".format(key)); exit(1)
 	return ([s[0] for s in seg_funcs], [s[1] for s in seg_funcs])
+	

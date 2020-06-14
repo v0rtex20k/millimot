@@ -5,6 +5,7 @@ import boxer
 import argparse
 import advanced
 import networker
+import graphics
 import numpy as np
 import networkx as nx
 from PIL import ImageDraw
@@ -13,26 +14,18 @@ from transformations import *
 from PIL import Image as pillow
 from itertools import permutations, product
 from matplotlib import pyplot as mtplt
-from typing import List, Callable, Tuple, NewType
+from typing import List, Callable, Tuple, NewType, Set, Dict
 
-ndarray, filepath = List, str
+ndarray = List
+Point = Tuple[int, int]
 collection = List[ndarray]
+Box = Tuple[int, int, int, int]
 Graph = NewType('Graph', nx.classes.graph.Graph)
+Mutator = Callable[[ndarray, int], ndarray]
 
 # SET-UNION MIN, MAX, MEDIAN FILTERS w/ AGS/AMU!!!!! (then run overlap)
 
-def plot_pixels(image: ndarray, idx: int)-> None:
-	pixels, counts = np.unique(image, return_counts=True)
-	mtplt.axvline(pixels[np.argmax(counts)], color='g', linestyle='dashed', linewidth=2)
-	mtplt.plot(pixels, counts)
-	mtplt.xlabel('Pixel Value')
-	mtplt.ylabel('Frequency')
-	print('Box {} ---> {:.4f}'.format(str(idx), pixels[np.argmax(counts)]))
-	mtplt.title('Box {} ---> {:.4f}'.format(str(idx), image.mean(), pixels[np.argmax(counts)]))
-	mtplt.yscale('log')
-	mtplt.show()
-
-def conditional_call(func: (Callable[[ndarray, int], ndarray]), image: ndarray, args: Tuple, segmenting: bool=False)-> ndarray:
+def conditional_call(func: Mutator, image: ndarray, args: Tuple, segmenting: bool=False)-> ndarray:
 	if func is None: return image
 	if not segmenting: return pillow.fromarray(np.uint8(func(image, *args)) if args else np.uint8(func(image))) if func else image
 	image = np.asarray(image, dtype=np.uint8)
@@ -41,19 +34,17 @@ def conditional_call(func: (Callable[[ndarray, int], ndarray]), image: ndarray, 
 	except:
 		return pillow.fromarray(np.uint8(func(image, *args)) if args else np.uint8(func(image))) if func else image
 
-ReLU = lambda x: max(0, x)
-area = lambda x, y, w, h: (w-x) * (h-y)
-def find_nodes(imgPath: filepath, filter_func: (Callable[[ndarray, int], ndarray]), f_args: Tuple,
-						   		 enhance_func: (Callable[[ndarray, int], ndarray]), e_args: Tuple,
-						  		 segment_func: (Callable[[ndarray, int], ndarray]), s_args: Tuple)-> [List[Tuple[int, int, int, int]], ndarray]:
+def mutate(imgPath: str, filter_func: Mutator, f_args: Tuple[int], enhance_func: Mutator, e_args: Tuple[int], 
+																   segment_func: Mutator, s_args: Tuple[int])-> ndarray:
 	image = pillow.open(imgPath).convert('L')
 	clone = image.copy()
-
 	clone = conditional_call(enhance_func, clone, e_args)
 	clone = conditional_call(filter_func, clone, f_args)
-	clone = conditional_call(segment_func, clone, s_args, True)
+	clone = conditional_call(segment_func, clone, s_args, segmenting=True)
+	return image, clone
 
-	boxes = boxer.get_contours(clone, make_boxes=True)
+def find_node_boxes(image: ndarray, clone: ndarray)-> Set[Box]:
+	gray_cv2_image, boxes = boxer.get_contours(clone)
 	nodes = []
 	for box in boxes:
 		if mole.contains_node(box, image):
@@ -62,32 +53,53 @@ def find_nodes(imgPath: filepath, filter_func: (Callable[[ndarray, int], ndarray
 	filtered_nodes = mole.filter_by_area(nodes)
 	return set(filtered_nodes)
 
-def find_edges(image_arr: ndarray, binary_threshold: int)-> List[Tuple[int, int, int, int]]:
-	segment_func, s_args = segmenters('ags')
-	s_image_arr = conditional_call(segment_func, (None, image_arr), s_args, True)
-	gray_cv2_image, contours = boxer.get_contours(s_image_arr)
-
-	image = pillow.fromarray(image_arr)
-	artist = ImageDraw.Draw(image)
-	edges = []
-	for contour in contours:
-		box = cv2.boundingRect(contour)
-		x, y, w, h = box
-		if 500 < w*h < 10000:
-			arrow_box, arrow_arr = arrow.trim_v_arrows(box, image_arr)
-			if arrow_arr is None or arrow_box is None: continue
-			arrow_box, arrow_arr = arrow.trim_h_arrows(arrow_box, image_arr)
-			if arrow_arr is None or arrow_box is None: continue
-			xc, yc, wc, hc = arrow_box
-			artist.rectangle((xc,yc,xc+wc,yc+hc), fill=None, outline=(0))
-			points = arrow.fit_line(arrow_box, arrow_arr)
-			#artist.line(points, fill =(200), width = 2)
-			edges.append(points)
-	image.show()
+def find_edges(centroids: List[Point], ablated_image: ndarray)-> Set[Box]:
+	eroded_image = boxer.erode(ablated_image)
+	graphics.draw_my_centroids(centroids, False, src_image=eroded_image)
+	#eroded_image.show()
 	exit()
+	gray_cv2_image, boxes = boxer.get_contours(ablated_image)
+	image_arr = np.asarray(ablated_image).copy()
+	artist = ImageDraw.Draw(ablated_image)
+	edges = []
+	for box in boxes:
+		x, y, w, h = box
+		arrow_box, arrow_arr = arrow.trim_v_arrows(box, image_arr)
+		if arrow_arr is None or arrow_box is None: continue
+		arrow_box, arrow_arr = arrow.trim_h_arrows(arrow_box, image_arr)
+		if arrow_arr is None or arrow_box is None: continue
+		xc, yc, wc, hc = arrow_box
+		artist.rectangle((xc,yc,xc+wc,yc+hc), fill=None, outline=(0))
+		points = arrow.fit_line(arrow_box, arrow_arr)
+		artist.line(points, fill =(150), width = 2)
+		edges.append(points)
+	ablated_image.show()
+	print('DISPLAYED')
 	return edges
 
-def build_network(nodeList: List[Tuple[int, int, int, int]], edgesList: List[Tuple[int, int]], image_arr)-> Graph:
+def find_nodes(args: Dict[str, str], show: bool=False)-> List[Point]:
+	imgPath = args['image']
+	filter_list,  f_args_list = filters(args['filter'])
+	enhance_list, e_args_list = enhancers(args['enhancer'])
+	segment_list, s_args_list = segmenters(args['segmenter'])
+	nodes = set()
+	clone = None
+	for f, f_args in zip(filter_list, f_args_list):
+		for e, e_args in zip(enhance_list, e_args_list):
+			for s, s_args in zip(segment_list, s_args_list):
+				image, clone = mutate(imgPath, f, f_args, e, e_args, s, s_args)
+				nodes = nodes.union(find_node_boxes(image, clone))
+
+	centroids, centroid_to_box = boxer.get_centroids(list(nodes))
+	condensed_centroids, box_groups = advanced.cluster_reduction(centroid_to_box, centroids)
+	condensed_boxes = boxer.condense(box_groups)
+	ablated_image = boxer.blackout(imgPath, nodes)
+	if show:
+		graphics.draw_my_boxes(imgPath, condensed_boxes, None)
+		graphics.draw_my_centroids(condensed_centroids, True, imgPath=imgPath)
+	return condensed_centroids, ablated_image
+
+def build_network(nodeList: List[Box], edgesList: List[Point], image_arr)-> Graph:
 	used_nodes = set()
 	for edge in edgesList:
 		midpoint = networker.midpoint(*edge)
@@ -110,27 +122,14 @@ def build_network(nodeList: List[Tuple[int, int, int, int]], edgesList: List[Tup
 		image.show()
 		input('Display next? ')
 
-		#dist = [networker.distance(midpoint, )]
-def core(args: dict)-> None:
-	imgPath = args['image']
-	filter_list,  f_args_list = filters(args['filter'])
-	enhance_list, e_args_list = enhancers(args['enhancer'])
-	segment_list, s_args_list = segmenters(args['segmenter'])
-	nodes = set()
-	for f, f_args in zip(filter_list, f_args_list):
-		for e, e_args in zip(enhance_list, e_args_list):
-			for s, s_args in zip(segment_list, s_args_list):
-				nodes = nodes.union(find_nodes(imgPath, f, f_args, e, e_args, s, s_args))
-	centroids = boxer.get_centroids(list(nodes))
-	#boxer.draw_my_boxes(imgPath, nodes, label=False)
-	condensed_centroids = advanced.cluster_reduction(nodes, centroids)
-	boxer.draw_my_centroids(imgPath, condensed_centroids)
+def core(args: Dict[str, str])-> None:
+	centroids, ablated_image = find_nodes(args, False)
+	edges = find_edges(centroids, ablated_image)
+	#graphics.draw_my_boxes(args['image'], edges, None)
 	exit()
-	#edges = find_edges(arrow_image, 127)
 	#build_network(nodes, edges, arrow_image)
 
 if __name__ == '__main__':
-	#choices!!
 	#https://pillow.readthedocs.io/en/stable/reference/Image.html
 	parser = argparse.ArgumentParser()
 	parser.add_argument("-i", "--image",  help="path to image", type=str)
