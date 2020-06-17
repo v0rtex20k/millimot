@@ -13,8 +13,6 @@ def fill_boxes(imgPath: ndarray, boxes: List[Box], fill: int)-> ndarray:
     image_arr = np.asarray(image).copy()
     for box in boxes:
         x,y,w,h = box
-        #x = int(0.99*x)
-        #w = int(1.1*w)
         image_arr[y:y+h,x:x+w] = fill
     return pillow.fromarray(np.uint8(image_arr))
 
@@ -32,36 +30,23 @@ def overlap(new_box: Tuple, existing_boxes: Tuple)-> bool:
   d  e  f
   g  h  i
 '''
-                    # b0      # h1      # d2      # f3        # g4      # i5        # a6         # c7
 N = lambda r, c: [(r-1, c), (r+1, c), (r, c-1), (r, c+1), (r+1, c-1), (r+1, c+1), (r-1, c-1), (r-1, c+1)]
-UN = lambda r,c: [(r-1, c),           (r, c-1), (r, c+1),                         (r-1, c-1), (r-1, c+1)]
-DN = lambda r,c: [          (r+1, c), (r, c-1), (r, c+1), (r+1, c-1), (r+1, c+1)                        ]
-LN = lambda r,c: [(r-1, c), (r+1, c), (r, c-1),           (r+1, c-1),             (r-1, c-1)            ]
-RN = lambda r,c: [(r-1, c), (r+1, c),           (r, c+1),             (r+1, c+1),             (r-1, c+1)]
-def on_border(x: int, y: int, direction: str, image_arr: ndarray)-> bool:
-    neighbors = None
-    if direction == 'u':
-        neighbors = np.asarray([image_arr[r,c] for r,c in UN(y,x)])
-    elif direction == 'd':
-        neighbors = np.asarray([image_arr[r,c] for r,c in DN(y,x)])
-    elif direction == 'l':
-        neighbors = np.asarray([image_arr[r,c] for r,c in LN(y,x)])
-    elif direction == 'r':
-        neighbors = np.asarray([image_arr[r,c] for r,c in RN(y,x)])
+def on_border(x: int, y: int, image_arr: ndarray)-> bool:
+    neighbors = np.asarray([image_arr[r,c] for r,c in N(y,x)])
     white_neighbors = neighbors[neighbors > 250]
-    if image_arr[y,x] < 220 and np.count_nonzero(white_neighbors) >= 3:
+    if np.count_nonzero(white_neighbors):
         return True
     return False
 
-# 20 % chance of moving
-r = lambda pos: pos + random.choice([-1,0,0,0,0,0,0,0,0,1])
+# 50 % chance of moving
+r = lambda pos: pos + random.choice([-1,0,0,0,0,1])
 def vertical_search(centroid: Point, direction: int, image_arr: ndarray)-> int:
     x, y = centroid
     dist = 0
     try:
-        while image_arr[y+(dist*direction),x] < 250 and dist < 30: # much less vertical leeway!
+        while image_arr[y+(dist*direction),x] < 253 and dist < 100:
             dist += 1
-            if on_border(r(x), y+(dist*direction), 'u' if direction < 0 else 'd', image_arr):
+            if on_border(r(x), y+(dist*direction), image_arr):
                 return dist
     except:
         pass
@@ -71,16 +56,16 @@ def horizontal_search(centroid: Point, direction: int, image_arr: ndarray)-> int
     x, y = centroid
     dist = 0
     try:
-        while image_arr[y,x+(dist*direction)] < 250 and dist < 100:
+        while image_arr[y,x+(dist*direction)] < 253 and dist < 100:
             dist += 1
-            if on_border(x+(dist*direction), r(y), 'l' if direction < 0 else 'r', image_arr):
+            if on_border(x+(dist*direction), r(y), image_arr):
                 return dist
     except:
         pass
     return dist
 
 def expand_from_centroid(image: ndarray, condensed_centroids: List[Point])-> List[Box]:
-    image_arr = np.asarray(image)
+    image_arr = np.asarray(image).copy()
     boxes = []
     for centroid in condensed_centroids:
         x, y = centroid # what if too short?
@@ -94,8 +79,8 @@ def expand_from_centroid(image: ndarray, condensed_centroids: List[Point])-> Lis
 def condense(box_groups: List[ndarray[Box]])-> List[Box]:
     condensed_boxes = []
     for group in box_groups:
-        x = np.mean(group[:,0]).astype(int)
-        y = np.mean(group[:,1]).astype(int)
+        x = np.amin(group[:,0]).astype(int)
+        y = np.amin(group[:,1]).astype(int)
         w = np.amax(group[:,2]).astype(int)
         h = np.amax(group[:,3]).astype(int)
         condensed_boxes.append((x,y,w,h))
@@ -128,4 +113,15 @@ def get_contours(image: ndarray, make_boxes: bool=True)-> ndarray:
         return gray_cv2_image, get_boxes(gray_cv2_image, contours, 100)
     return gray_cv2_image, contours
 
-
+def grayify(image: ndarray)-> None:
+    image_arr = np.asarray(image).copy()
+    for y in range(image_arr.shape[0]):
+        for x in range(image_arr.shape[1]):
+            if image_arr[y,x] > 250:
+                try:
+                    neighbors = np.asarray([image_arr[r,c] for r,c in N(y,x)])
+                except:
+                    continue
+                if any(neighbors[np.logical_and(neighbors > 100, neighbors < 220)]):
+                    image_arr[y,x] = 100
+    return pillow.fromarray(np.uint8(image_arr))

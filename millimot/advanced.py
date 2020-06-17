@@ -1,10 +1,11 @@
 import cv2
 import numpy as np
+from math import sqrt
 from PIL import ImageDraw
 from PIL import Image as pillow
 from collections import Counter
 from sklearn.cluster import KMeans
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Set
 from matplotlib import pyplot as mtplt
 from scipy.spatial.distance import cdist
 from sklearn.metrics import silhouette_score
@@ -52,6 +53,21 @@ def threshold(ablated_image: ndarray)-> ndarray:
 	image_arr[image_arr > 200] = 255
 	return pillow.fromarray(image_arr)
 
+def build_edgelist(centroids_to_endpoints: Dict[Point, Set[Point]], endpoint_pairs: Dict[Point, Point])-> Set[Tuple[Point, Point]]:
+	edgelist = set()
+	for curr in centroids_to_endpoints:
+		for other in centroids_to_endpoints:
+			if curr == other: continue
+			for endpoint in centroids_to_endpoints[curr]:
+				if endpoint_pairs[endpoint] in centroids_to_endpoints[other] and endpoint not in centroids_to_endpoints[other]:
+					edgelist.add((curr, other))
+	return edgelist
+
+def map_endpoints(row: ndarray, centroids: ndarray, endpoints: ndarray, centroids_to_endpoints: Dict[Point, Set[Point]])-> None:
+	xc, yc = centroids[row[0], :]
+	xe, ye = endpoints[row[1], :]
+	centroids_to_endpoints[(xc, yc)].add((xe, ye))
+
 def get_endpoints(x: int, y: int, image_arr: ndarray)-> Tuple[Point, Point]:
 	visited, queue  = {(x,y)}, {*[(r,c) for r,c in N(y,x) if image_arr[r,c] == 0]}
 	if not queue:
@@ -73,9 +89,10 @@ def get_endpoints(x: int, y: int, image_arr: ndarray)-> Tuple[Point, Point]:
 
 
 def get_edges(centroids: List[Point], ablated_image: ndarray)-> List[Tuple[Point, Point]]:
-	edgelist = set()
+	centroids_to_endpoints = {c: set() for c in centroids}
 	image_arr = np.asarray(ablated_image).copy()
-	endpoint_pairs, centroids = set(), np.array(centroids)
+	endpoint_pairs = dict()
+	loose_endpoints = []
 	while image_arr[image_arr == 0].size > 0: # not exactly zero - might be some odd fragments
 		black_pixels = np.argwhere(image_arr == 0)
 		source = np.random.randint(black_pixels.shape[0])
@@ -83,8 +100,29 @@ def get_edges(centroids: List[Point], ablated_image: ndarray)-> List[Tuple[Point
 		if image_arr[y,x] == 0:
 			endpoints = get_endpoints(x, y, image_arr)
 			if endpoints:
-				endpoint_pairs.add(endpoints)
-
+				(x1, y1), (x2, y2) = endpoints
+				if sqrt((x2 - x1)**2 + (y2 - y1)**2) <= 10:
+					continue
+				endpoint_pairs[(x1,y1)] = (x2, y2)
+				endpoint_pairs[(x2,y2)] = (x1, y1)
+				loose_endpoints.extend(endpoints)
+	loose_endpoints = np.array(loose_endpoints).reshape(-1,2)
+	centroids = np.array(centroids)
+	distances = cdist(centroids, loose_endpoints, 'euclidean')
+	nearby_endpoints = np.argwhere(distances <= 150)
+	np.apply_along_axis(map_endpoints, 1, nearby_endpoints, centroids, loose_endpoints, centroids_to_endpoints)
+	edgelist = build_edgelist(centroids_to_endpoints, endpoint_pairs)
+	artist = ImageDraw.Draw(ablated_image)
+	for endpoint in loose_endpoints:
+		artist.point(endpoint, fill=150)
+	for edge in edgelist:
+		artist.line(edge, fill=150)
+	#ablated_image.show()
+	#exit()
+	return loose_endpoints
+# https://tufts.zoom.us/j/94880736374
+# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4908361/pdf/btw277.pdf
+	'''
 	for pair in endpoint_pairs:
 		p1, p2 = np.array(pair[0]), np.array(pair[1])
 		if np.linalg.norm(p1-p2) < 15: # bad to have a hard limit ... look at bimodal hist? adaptive threshold
@@ -97,7 +135,8 @@ def get_edges(centroids: List[Point], ablated_image: ndarray)-> List[Tuple[Point
 		if (xs, ys) == (xd, yd):
 			continue
 		edgelist.add(((xs, ys), (xd, yd)))
-
+	'''
+	exit()
 	#blank = pillow.fromarray(np.full_like(ablated_image, 255))
 	artist = ImageDraw.Draw(ablated_image)
 	#dummy = ImageDraw.Draw(blank)

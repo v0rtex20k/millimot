@@ -76,11 +76,12 @@ def find_nodes(args: Dict[str, str], show: bool=False)-> List[Point]:
 	centroids, centroid_to_box = boxer.get_centroids(list(nodes))
 	condensed_centroids, box_groups = advanced.cluster_reduction(centroid_to_box, centroids)
 	condensed_boxes = boxer.condense(box_groups)
-	ablated_image = boxer.fill_boxes(imgPath, condensed_boxes, 0)
+	ablated_image = boxer.fill_boxes(imgPath, condensed_boxes, 200) # any intermediate gray value is fine
+	ablated_image = boxer.grayify(ablated_image)
 	expanded_boxes = boxer.expand_from_centroid(ablated_image, condensed_centroids)
 	ablated_image = boxer.fill_boxes(imgPath, expanded_boxes, 255)
 	if show:
-		graphics.draw_my_boxes(imgPath, condensed_boxes, None)
+		graphics.draw_my_boxes(imgPath, expanded_boxes, None)
 		graphics.draw_my_centroids(condensed_centroids, True, imgPath=imgPath)
 	return condensed_centroids, ablated_image
 
