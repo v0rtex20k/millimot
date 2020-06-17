@@ -48,50 +48,63 @@ def cluster_reduction(centroid_to_box: Dict[Point, Box], centroids: List[Point])
 N = lambda r, c: [(r-1, c), (r+1, c), (r, c-1), (r, c+1), (r+1, c-1), (r+1, c+1), (r-1, c-1), (r-1, c+1)]
 def threshold(ablated_image: ndarray)-> ndarray:
 	image_arr = np.asarray(ablated_image).copy()
-	image_arr[image_arr < 100]  = 0
-	image_arr[image_arr >= 100] = 255
+	image_arr[image_arr <= 200]  = 0
+	image_arr[image_arr > 200] = 255
 	return pillow.fromarray(image_arr)
 
 def get_endpoints(x: int, y: int, image_arr: ndarray)-> Tuple[Point, Point]:
 	visited, queue  = {(x,y)}, {*[(r,c) for r,c in N(y,x) if image_arr[r,c] == 0]}
+	if not queue:
+		image_arr[y,x] = 255
+		return None
 	while queue:
+		#print(len(queue), end=' ... ')
 		y2,x2 = queue.pop()
-		if image_arr[y2,x2] == 0 and image_arr[y2,x2] not in visited:
-			image_arr[y2,x2] = 255 # set to white so we don't explore the same place again
+		if image_arr[y2,x2] == 0:
 			visited.add((x2,y2))
-			queue.union(set([(r,c) for r,c in N(y2,x2) if image_arr[r,c] == 0 and (c,r) not in visited]))
+			for r,c in N(y2,x2):
+				if image_arr[r,c] == 0:
+					queue.add((r,c))
+			image_arr[y2,x2] = 255 # set to white so I don't explore the same place again
 	visited = np.array(list(visited))
 	distances = cdist(visited, visited, 'euclidean')
 	i, j = np.unravel_index(np.argmax(distances), distances.shape)
-	return (tuple(visited[i]), tuple(visited[j]))
+	return tuple(visited[i]), tuple(visited[j]) # stored as (x,y)
 
 
 def get_edges(centroids: List[Point], ablated_image: ndarray)-> List[Tuple[Point, Point]]:
-	# randomly choose black point
-	# get all connected black points
-	# find farthest points in minigraph
-	# find closest centroid to each endpoint and return edge
 	edgelist = set()
 	image_arr = np.asarray(ablated_image).copy()
 	endpoint_pairs, centroids = set(), np.array(centroids)
-	while image_arr[image_arr == 0].size > 0:
-		m,n = image_arr.shape
-		x = np.random.randint(n)
-		y = np.random.randint(m)
+	while image_arr[image_arr == 0].size > 0: # not exactly zero - might be some odd fragments
+		black_pixels = np.argwhere(image_arr == 0)
+		source = np.random.randint(black_pixels.shape[0])
+		y, x = black_pixels[source, :]
 		if image_arr[y,x] == 0:
 			endpoints = get_endpoints(x, y, image_arr)
-			endpoint_pairs.add(endpoints)
+			if endpoints:
+				endpoint_pairs.add(endpoints)
+
 	for pair in endpoint_pairs:
-		pair = np.array(pair)
-		distances = cdist(pair, centroids, 'euclidean')
-		# find minimum for each endpoint, then make that an edge and add to edgelist.
-		exit()
-		#i, j = np.unravel_index(np.argmin(distances), distances.shape)
-		#edgelist.add((cent))
+		p1, p2 = np.array(pair[0]), np.array(pair[1])
+		if np.linalg.norm(p1-p2) < 15: # bad to have a hard limit ... look at bimodal hist? adaptive threshold
+			continue
+		distances = cdist(np.array(pair), centroids, 'euclidean')
+		if any(np.amin(distances, axis=1) > 200): # bad to have a hard limit ... look at bimodal hist? adaptive threshold
+			continue
+		incident_nodes = centroids[np.argmin(distances, axis=1)]
+		(xs, ys), (xd, yd) = incident_nodes[0,:], incident_nodes[1,:]
+		if (xs, ys) == (xd, yd):
+			continue
+		edgelist.add(((xs, ys), (xd, yd)))
 
-
-
-
+	#blank = pillow.fromarray(np.full_like(ablated_image, 255))
+	artist = ImageDraw.Draw(ablated_image)
+	#dummy = ImageDraw.Draw(blank)
+	for edge in edgelist:
+		print(edge)
+		artist.line(edge, fill=150)
+	ablated_image.show()
 
 
 

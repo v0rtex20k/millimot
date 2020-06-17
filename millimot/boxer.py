@@ -13,8 +13,8 @@ def fill_boxes(imgPath: ndarray, boxes: List[Box], fill: int)-> ndarray:
     image_arr = np.asarray(image).copy()
     for box in boxes:
         x,y,w,h = box
-        x = int(0.99*x)
-        w = int(1.1*w)
+        #x = int(0.99*x)
+        #w = int(1.1*w)
         image_arr[y:y+h,x:x+w] = fill
     return pillow.fromarray(np.uint8(image_arr))
 

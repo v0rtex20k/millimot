@@ -59,7 +59,7 @@ def find_node_boxes(image: ndarray, clone: ndarray)-> Set[Box]:
 def find_edges(centroids: List[Point], ablated_image: ndarray)-> Set[Box]:
 	ablated_image = advanced.threshold(ablated_image)
 	edges = advanced.get_edges(centroids, ablated_image)
-	#graphics.draw_my_centroids(centroids, False, ablated_image=eroded_image)
+	graphics.draw_my_centroids(centroids, False, src_image = ablated_image)
 
 def find_nodes(args: Dict[str, str], show: bool=False)-> List[Point]:
 	imgPath = args['image']

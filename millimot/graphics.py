@@ -26,7 +26,7 @@ def draw_my_centroids(centroids: List[Point], constellation: bool=False, imgPath
     for centroid in centroids:
         x, y = centroid
         r = 3 if constellation else 10
-        artist.ellipse([(x-r, y-r), (x+r, y+r)], fill=255)
+        artist.ellipse([(x-r, y-r), (x+r, y+r)], fill=255 if constellation else 0)
     if constellation:
         blank.show()
     image.show()
