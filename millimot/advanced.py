@@ -6,6 +6,7 @@ from collections import Counter
 from sklearn.cluster import KMeans
 from typing import List, Tuple, Dict
 from matplotlib import pyplot as mtplt
+from scipy.spatial.distance import cdist
 from sklearn.metrics import silhouette_score
 
 ndarray = List
@@ -44,35 +45,53 @@ def cluster_reduction(centroid_to_box: Dict[Point, Box], centroids: List[Point])
 		box_groups.append(np.asarray(mini_group))
 	return [(int(x),int(y)) for x,y in condensed_centroids.tolist()], box_groups
 
+N = lambda r, c: [(r-1, c), (r+1, c), (r, c-1), (r, c+1), (r+1, c-1), (r+1, c+1), (r-1, c-1), (r-1, c+1)]
+def threshold(ablated_image: ndarray)-> ndarray:
+	image_arr = np.asarray(ablated_image).copy()
+	image_arr[image_arr < 100]  = 0
+	image_arr[image_arr >= 100] = 255
+	return pillow.fromarray(image_arr)
 
-'''def erode(ablated_image: ndarray)-> ndarray:
-    bgr_cv2_image  = cv2.cvtColor(np.asarray(ablated_image), cv2.COLOR_GRAY2BGR)
-    gray_cv2_image = cv2.cvtColor(bgr_cv2_image, cv2.COLOR_BGR2GRAY)
-    vd_kernel = np.uint8([[1,0,0,0,1,0,0,0,1], # vertical & diagonal
-                          [0,1,0,0,1,0,0,1,0],
-                          [0,0,0,1,1,1,0,0,0],
-                          [0,0,0,0,1,0,0,0,0],
-                          [0,0,0,1,1,1,0,0,0],
-                          [0,0,1,0,1,0,1,0,0],
-                          [1,0,0,0,1,0,0,0,1]])
+def get_endpoints(x: int, y: int, image_arr: ndarray)-> Tuple[Point, Point]:
+	visited, queue  = {(x,y)}, {*[(r,c) for r,c in N(y,x) if image_arr[r,c] == 0]}
+	while queue:
+		y2,x2 = queue.pop()
+		if image_arr[y2,x2] == 0 and image_arr[y2,x2] not in visited:
+			image_arr[y2,x2] = 255 # set to white so we don't explore the same place again
+			visited.add((x2,y2))
+			queue.union(set([(r,c) for r,c in N(y2,x2) if image_arr[r,c] == 0 and (c,r) not in visited]))
+	visited = np.array(list(visited))
+	distances = cdist(visited, visited, 'euclidean')
+	i, j = np.unravel_index(np.argmax(distances), distances.shape)
+	return (tuple(visited[i]), tuple(visited[j]))
 
-    eroded_gray_cv2_image = cv2.erode(gray_cv2_image, vd_kernel, iterations=1)
-    #eroded_gray_cv2_image = cv2.erode(eroded_gray_cv2_image, v_kernel, iterations=1)
-    eroded_arr = np.uint8(eroded_gray_cv2_image)
-    eroded_arr[eroded_arr < 100] = 0
-    eroded_arr[eroded_arr > 100] = 255
-    return pillow.fromarray(eroded_arr)
 
-def follow_paths(source: Point, eroded_image: ndarray)-> List[Point]:
-	arr = np.asarray(eroded_image)
-	explored, to_be_explored = [], []
-	explored.append(source)
-	# go until you hit a gray pixel, then quit - you can find closest centroid later and append that.
+def get_edges(centroids: List[Point], ablated_image: ndarray)-> List[Tuple[Point, Point]]:
+	# randomly choose black point
+	# get all connected black points
+	# find farthest points in minigraph
+	# find closest centroid to each endpoint and return edge
+	edgelist = set()
+	image_arr = np.asarray(ablated_image).copy()
+	endpoint_pairs, centroids = set(), np.array(centroids)
+	while image_arr[image_arr == 0].size > 0:
+		m,n = image_arr.shape
+		x = np.random.randint(n)
+		y = np.random.randint(m)
+		if image_arr[y,x] == 0:
+			endpoints = get_endpoints(x, y, image_arr)
+			endpoint_pairs.add(endpoints)
+	for pair in endpoint_pairs:
+		pair = np.array(pair)
+		distances = cdist(pair, centroids, 'euclidean')
+		# find minimum for each endpoint, then make that an edge and add to edgelist.
+		exit()
+		#i, j = np.unravel_index(np.argmin(distances), distances.shape)
+		#edgelist.add((cent))
 
-def get_edgelist(centroids: List[Point], eroded_image: ndarray)-> List[Tuple[Point, Point]]:
-	centroids = sorted(centroids, key= lambda p: p[1])
-	for centroid in centroids:
-		follow_paths(centroid, eroded_image)'''
+
+
+
 
 
 

@@ -35,7 +35,11 @@ def conditional_call(func: Mutator, image: ndarray, args: Tuple, segmenting: boo
 
 def mutate(imgPath: str, filter_func: Mutator, f_args: Tuple[int], enhance_func: Mutator, e_args: Tuple[int], 
 																   segment_func: Mutator, s_args: Tuple[int])-> ndarray:
-	image = pillow.open(imgPath).convert('L')
+	try:
+		image = pillow.open(imgPath).convert('L')
+	except FileNotFoundError:
+		print('No file exists at \"{}\".'.format(imgPath))
+		exit()
 	clone = image.copy()
 	clone = conditional_call(enhance_func, clone, e_args)
 	clone = conditional_call(filter_func, clone, f_args)
@@ -53,7 +57,8 @@ def find_node_boxes(image: ndarray, clone: ndarray)-> Set[Box]:
 	return set(filtered_node_boxes)
 
 def find_edges(centroids: List[Point], ablated_image: ndarray)-> Set[Box]:
-	
+	ablated_image = advanced.threshold(ablated_image)
+	edges = advanced.get_edges(centroids, ablated_image)
 	#graphics.draw_my_centroids(centroids, False, ablated_image=eroded_image)
 
 def find_nodes(args: Dict[str, str], show: bool=False)-> List[Point]:
@@ -73,7 +78,7 @@ def find_nodes(args: Dict[str, str], show: bool=False)-> List[Point]:
 	condensed_boxes = boxer.condense(box_groups)
 	ablated_image = boxer.fill_boxes(imgPath, condensed_boxes, 0)
 	expanded_boxes = boxer.expand_from_centroid(ablated_image, condensed_centroids)
-	ablated_image = boxer.fill_boxes(imgPath, expanded_boxes, 0)
+	ablated_image = boxer.fill_boxes(imgPath, expanded_boxes, 255)
 	if show:
 		graphics.draw_my_boxes(imgPath, condensed_boxes, None)
 		graphics.draw_my_centroids(condensed_centroids, True, imgPath=imgPath)
@@ -81,7 +86,7 @@ def find_nodes(args: Dict[str, str], show: bool=False)-> List[Point]:
 
 
 def core(args: Dict[str, str])-> None:
-	centroids, ablated_image = find_nodes(args, True)
+	centroids, ablated_image = find_nodes(args, False)
 	edges = find_edges(centroids, ablated_image)
 	#graphics.draw_my_boxes(args['image'], edges, None)
 	exit()
