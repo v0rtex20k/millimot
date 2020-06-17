@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import pytesseract
 from scipy import stats
 from matplotlib import pyplot as mtplt
 from typing import List, Callable, Tuple

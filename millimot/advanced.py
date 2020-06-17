@@ -42,7 +42,37 @@ def cluster_reduction(centroid_to_box: Dict[Point, Box], centroids: List[Point])
 		current_row += 1
 		assert(len(mini_group) == cluster.shape[0]) # must be as many boxes as centroids in cluster
 		box_groups.append(np.asarray(mini_group))
-	return [(x,y) for x,y in condensed_centroids.tolist()], box_groups
+	return [(int(x),int(y)) for x,y in condensed_centroids.tolist()], box_groups
+
+
+'''def erode(ablated_image: ndarray)-> ndarray:
+    bgr_cv2_image  = cv2.cvtColor(np.asarray(ablated_image), cv2.COLOR_GRAY2BGR)
+    gray_cv2_image = cv2.cvtColor(bgr_cv2_image, cv2.COLOR_BGR2GRAY)
+    vd_kernel = np.uint8([[1,0,0,0,1,0,0,0,1], # vertical & diagonal
+                          [0,1,0,0,1,0,0,1,0],
+                          [0,0,0,1,1,1,0,0,0],
+                          [0,0,0,0,1,0,0,0,0],
+                          [0,0,0,1,1,1,0,0,0],
+                          [0,0,1,0,1,0,1,0,0],
+                          [1,0,0,0,1,0,0,0,1]])
+
+    eroded_gray_cv2_image = cv2.erode(gray_cv2_image, vd_kernel, iterations=1)
+    #eroded_gray_cv2_image = cv2.erode(eroded_gray_cv2_image, v_kernel, iterations=1)
+    eroded_arr = np.uint8(eroded_gray_cv2_image)
+    eroded_arr[eroded_arr < 100] = 0
+    eroded_arr[eroded_arr > 100] = 255
+    return pillow.fromarray(eroded_arr)
+
+def follow_paths(source: Point, eroded_image: ndarray)-> List[Point]:
+	arr = np.asarray(eroded_image)
+	explored, to_be_explored = [], []
+	explored.append(source)
+	# go until you hit a gray pixel, then quit - you can find closest centroid later and append that.
+
+def get_edgelist(centroids: List[Point], eroded_image: ndarray)-> List[Tuple[Point, Point]]:
+	centroids = sorted(centroids, key= lambda p: p[1])
+	for centroid in centroids:
+		follow_paths(centroid, eroded_image)'''
 
 
 

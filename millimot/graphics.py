@@ -66,7 +66,7 @@ def draw_my_contours(gray_cv2_image: ndarray, contours: ndarray)-> None:
 
 def plot_pixels(image: ndarray, idx: int)-> None:
     pixels, counts = np.unique(image, return_counts=True)
-    mtplt.axvline(pixels[np.argmax(counts)], color='g', linestyle='dashed', linewidth=2)
+    mtplt.axvline(pixels[np.argmax(counts)], color='g', linestyle='dashed', linewidth=3)
     mtplt.plot(pixels, counts)
     mtplt.xlabel('Pixel Value')
     mtplt.ylabel('Frequency')
