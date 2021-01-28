@@ -31,7 +31,7 @@ def overlap(new_box: Tuple, existing_boxes: Tuple)-> bool:
   g  h  i
 '''
 N = lambda r, c: [(r-1, c), (r+1, c), (r, c-1), (r, c+1), (r+1, c-1), (r+1, c+1), (r-1, c-1), (r-1, c+1)]
-def on_border(x: int, y: int, image_arr: ndarray)-> bool:
+def past_border(x: int, y: int, image_arr: ndarray)-> bool:
     neighbors = np.asarray([image_arr[r,c] for r,c in N(y,x)])
     white_neighbors = neighbors[neighbors > 250]
     if np.count_nonzero(white_neighbors):
@@ -44,9 +44,9 @@ def vertical_search(centroid: Point, direction: int, image_arr: ndarray)-> int:
     x, y = centroid
     dist = 0
     try:
-        while image_arr[y+(dist*direction),x] < 253 and dist < 100:
+        while image_arr[y+(dist*direction),x] < 253 and dist < 50:
             dist += 1
-            if on_border(r(x), y+(dist*direction), image_arr):
+            if past_border(r(x), y+(dist*direction), image_arr):
                 return dist
     except:
         pass
@@ -56,9 +56,9 @@ def horizontal_search(centroid: Point, direction: int, image_arr: ndarray)-> int
     x, y = centroid
     dist = 0
     try:
-        while image_arr[y,x+(dist*direction)] < 253 and dist < 100:
+        while image_arr[y,x+(dist*direction)] < 253 and dist < 50:
             dist += 1
-            if on_border(x+(dist*direction), r(y), image_arr):
+            if past_border(x+(dist*direction), r(y), image_arr):
                 return dist
     except:
         pass
@@ -123,5 +123,5 @@ def grayify(image: ndarray)-> None:
                 except:
                     continue
                 if any(neighbors[np.logical_and(neighbors > 100, neighbors < 220)]):
-                    image_arr[y,x] = 100
+                    image_arr[y,x] = 255
     return pillow.fromarray(np.uint8(image_arr))

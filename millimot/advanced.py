@@ -49,24 +49,23 @@ def cluster_reduction(centroid_to_box: Dict[Point, Box], centroids: List[Point])
 N = lambda r, c: [(r-1, c), (r+1, c), (r, c-1), (r, c+1), (r+1, c-1), (r+1, c+1), (r-1, c-1), (r-1, c+1)]
 def threshold(ablated_image: ndarray)-> ndarray:
 	image_arr = np.asarray(ablated_image).copy()
-	image_arr[image_arr <= 200]  = 0
-	image_arr[image_arr > 200] = 255
+	image_arr[image_arr <= 100]  = 0
+	image_arr[image_arr > 100] = 255
 	return pillow.fromarray(image_arr)
 
-def build_edgelist(centroids_to_endpoints: Dict[Point, Set[Point]], endpoint_pairs: Dict[Point, Point])-> Set[Tuple[Point, Point]]:
+def build_edgelist(endpoints_to_centroids: Dict[Point, Point], endpoint_pairs: Dict[Point, Point])-> Set[Tuple[Point, Point]]:
 	edgelist = set()
-	for curr in centroids_to_endpoints:
-		for other in centroids_to_endpoints:
-			if curr == other: continue
-			for endpoint in centroids_to_endpoints[curr]:
-				if endpoint_pairs[endpoint] in centroids_to_endpoints[other] and endpoint not in centroids_to_endpoints[other]:
-					edgelist.add((curr, other))
+	for end1, end2 in endpoint_pairs.items():
+		if end1 == end2: continue
+		c1, c2 = endpoints_to_centroids[end1], endpoints_to_centroids[end2]
+		if c1 == c2: continue
+		edgelist.add((c1, c2))
 	return edgelist
 
-def map_endpoints(row: ndarray, centroids: ndarray, endpoints: ndarray, centroids_to_endpoints: Dict[Point, Set[Point]])-> None:
-	xc, yc = centroids[row[0], :]
-	xe, ye = endpoints[row[1], :]
-	centroids_to_endpoints[(xc, yc)].add((xe, ye))
+def map_endpoints(row: ndarray, centroids: ndarray, endpoints: ndarray, endpoints_to_centroids: Dict[Point, Point])-> None:
+	xe, ye = endpoints[row[0], :]
+	xc, yc = centroids[row[1], :]
+	endpoints_to_centroids[(xe, ye)] = (xc, yc)
 
 def get_endpoints(x: int, y: int, image_arr: ndarray)-> Tuple[Point, Point]:
 	visited, queue  = {(x,y)}, {*[(r,c) for r,c in N(y,x) if image_arr[r,c] == 0]}
@@ -74,7 +73,6 @@ def get_endpoints(x: int, y: int, image_arr: ndarray)-> Tuple[Point, Point]:
 		image_arr[y,x] = 255
 		return None
 	while queue:
-		#print(len(queue), end=' ... ')
 		y2,x2 = queue.pop()
 		if image_arr[y2,x2] == 0:
 			visited.add((x2,y2))
@@ -89,7 +87,6 @@ def get_endpoints(x: int, y: int, image_arr: ndarray)-> Tuple[Point, Point]:
 
 
 def get_edges(centroids: List[Point], ablated_image: ndarray)-> List[Tuple[Point, Point]]:
-	centroids_to_endpoints = {c: set() for c in centroids}
 	image_arr = np.asarray(ablated_image).copy()
 	endpoint_pairs = dict()
 	loose_endpoints = []
@@ -105,45 +102,27 @@ def get_edges(centroids: List[Point], ablated_image: ndarray)-> List[Tuple[Point
 					continue
 				endpoint_pairs[(x1,y1)] = (x2, y2)
 				endpoint_pairs[(x2,y2)] = (x1, y1)
-				loose_endpoints.extend(endpoints)
-	loose_endpoints = np.array(loose_endpoints).reshape(-1,2)
-	centroids = np.array(centroids)
-	distances = cdist(centroids, loose_endpoints, 'euclidean')
-	nearby_endpoints = np.argwhere(distances <= 150)
-	np.apply_along_axis(map_endpoints, 1, nearby_endpoints, centroids, loose_endpoints, centroids_to_endpoints)
-	edgelist = build_edgelist(centroids_to_endpoints, endpoint_pairs)
-	artist = ImageDraw.Draw(ablated_image)
-	for endpoint in loose_endpoints:
-		artist.point(endpoint, fill=150)
-	for edge in edgelist:
-		artist.line(edge, fill=150)
-	#ablated_image.show()
-	#exit()
-	return loose_endpoints
-# https://tufts.zoom.us/j/94880736374
-# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4908361/pdf/btw277.pdf
-	'''
-	for pair in endpoint_pairs:
-		p1, p2 = np.array(pair[0]), np.array(pair[1])
-		if np.linalg.norm(p1-p2) < 15: # bad to have a hard limit ... look at bimodal hist? adaptive threshold
-			continue
-		distances = cdist(np.array(pair), centroids, 'euclidean')
-		if any(np.amin(distances, axis=1) > 200): # bad to have a hard limit ... look at bimodal hist? adaptive threshold
-			continue
-		incident_nodes = centroids[np.argmin(distances, axis=1)]
-		(xs, ys), (xd, yd) = incident_nodes[0,:], incident_nodes[1,:]
-		if (xs, ys) == (xd, yd):
-			continue
-		edgelist.add(((xs, ys), (xd, yd)))
-	'''
-	exit()
-	#blank = pillow.fromarray(np.full_like(ablated_image, 255))
-	artist = ImageDraw.Draw(ablated_image)
-	#dummy = ImageDraw.Draw(blank)
-	for edge in edgelist:
-		print(edge)
-		artist.line(edge, fill=150)
-	ablated_image.show()
+				loose_endpoints.extend([(x1, y1), ((x1+x2)//2, (y1+y2)//2) ,(x2, y2)])
 
+	#endpoints_to_centroids = dict()
+	#loose_endpoints = np.array(loose_endpoints).reshape(-1,2)
+	#centroids = np.array(centroids)
+	#distances = cdist(loose_endpoints, centroids, 'euclidean')
+	#nearby_centroids = np.c_[np.arange(loose_endpoints.shape[0]), np.argmin(distances, axis=1)]
+	#np.apply_along_axis(map_endpoints, 1, nearby_centroids, centroids, loose_endpoints, endpoints_to_centroids)
+	#edgelist = build_edgelist(endpoints_to_centroids, endpoint_pairs)
+	#artist = ImageDraw.Draw(ablated_image)
+	blank = pillow.fromarray(np.full_like(ablated_image, 0))
+	artist = ImageDraw.Draw(blank)
+	for edge in endpoint_pairs.items():
+		artist.line(edge, fill=255)
+	for centroid in centroids:
+		x, y = centroid
+		r = 3
+		artist.ellipse([(x-r, y-r), (x+r, y+r)], fill=200)
+	blank.show()
+	ablated_image.show()
+	exit()
+	return loose_endpoints
 
 

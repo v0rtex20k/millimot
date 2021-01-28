@@ -22,8 +22,6 @@ Box = Tuple[int, int, int, int]
 Graph = NewType('Graph', nx.classes.graph.Graph)
 Mutator = Callable[[ndarray, int], ndarray]
 
-# SET-UNION MIN, MAX, MEDIAN FILTERS w/ AGS/AMU!!!!! (then run overlap)
-
 def conditional_call(func: Mutator, image: ndarray, args: Tuple, segmenting: bool=False)-> ndarray:
 	if func is None: return image
 	if not segmenting: return pillow.fromarray(np.uint8(func(image, *args)) if args else np.uint8(func(image))) if func else image
@@ -58,8 +56,9 @@ def find_node_boxes(image: ndarray, clone: ndarray)-> Set[Box]:
 
 def find_edges(centroids: List[Point], ablated_image: ndarray)-> Set[Box]:
 	ablated_image = advanced.threshold(ablated_image)
-	edges = advanced.get_edges(centroids, ablated_image)
-	graphics.draw_my_centroids(centroids, False, src_image = ablated_image)
+	edgelist = advanced.get_edges(centroids, ablated_image)
+	exit()
+	#graphics.draw_my_centroids(centroids, False, src_image=blank)
 
 def find_nodes(args: Dict[str, str], show: bool=False)-> List[Point]:
 	imgPath = args['image']
@@ -76,10 +75,8 @@ def find_nodes(args: Dict[str, str], show: bool=False)-> List[Point]:
 	centroids, centroid_to_box = boxer.get_centroids(list(nodes))
 	condensed_centroids, box_groups = advanced.cluster_reduction(centroid_to_box, centroids)
 	condensed_boxes = boxer.condense(box_groups)
-	ablated_image = boxer.fill_boxes(imgPath, condensed_boxes, 200) # any intermediate gray value is fine
-	ablated_image = boxer.grayify(ablated_image)
-	expanded_boxes = boxer.expand_from_centroid(ablated_image, condensed_centroids)
-	ablated_image = boxer.fill_boxes(imgPath, expanded_boxes, 255)
+	ablated_image = boxer.fill_boxes(imgPath, condensed_boxes, 150) # any intermediate gray value is fine > 100
+	ablated_image = boxer.grayify(ablated_image)					# for grayify
 	if show:
 		graphics.draw_my_boxes(imgPath, expanded_boxes, None)
 		graphics.draw_my_centroids(condensed_centroids, True, imgPath=imgPath)
